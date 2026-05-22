@@ -54,6 +54,17 @@ class BestiaryScene extends Phaser.Scene {
         rarityColor: '#ffaa44',
       },
       {
+        id: 'exploder',
+        name: 'エクスプローダー',
+        color: 0xcc3300,
+        hp: 55, speed: 60, damage: 5, bulletDamage: 38, exp: 18, gold: 8, size: 15,
+        attackType: '死亡時爆発',
+        spawnTiming: '中盤（40秒〜）',
+        desc: '倒したとき周囲110pxに大ダメージを与える。距離をとって倒そう。',
+        rarity: '★★★☆☆',
+        rarityColor: '#ff6622',
+      },
+      {
         id: 'spinner',
         name: 'スピナー',
         color: 0xbb33bb,
@@ -92,11 +103,11 @@ class BestiaryScene extends Phaser.Scene {
       fontSize: '14px', color: '#888888',
     }).setOrigin(0.5, 0);
 
-    // Cards — 5 in a row
-    const cardW   = 210;
-    const cardH   = 400;
-    const cardGap = 18;
-    const totalW  = cardW * 5 + cardGap * 4;
+    // Cards — 6 in a row
+    const cardW   = 182;
+    const cardH   = 390;
+    const cardGap = 12;
+    const totalW  = cardW * 6 + cardGap * 5;
     const cardStartX = (W - totalW) / 2;
     const cardY   = panelY + 100;
 
@@ -307,6 +318,37 @@ class BestiaryScene extends Phaser.Scene {
       g.lineBetween(gx + s, gy, gx + s + 22, gy);
       g.fillStyle(0xff9933, 1);
       g.fillCircle(gx + s + 24, gy, 5);
+
+    } else if (e.id === 'exploder') {
+      // Spikes
+      g.fillStyle(0xff6600, 0.9);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        g.fillTriangle(
+          gx + Math.cos(a) * (s + 10),       gy + Math.sin(a) * (s + 10),
+          gx + Math.cos(a + 0.48) * (s - 1), gy + Math.sin(a + 0.48) * (s - 1),
+          gx + Math.cos(a - 0.48) * (s - 1), gy + Math.sin(a - 0.48) * (s - 1)
+        );
+      }
+      // Body
+      g.fillStyle(e.color, 1);
+      g.fillCircle(gx, gy, s);
+      g.fillStyle(0xff8800, 0.5);
+      g.fillCircle(gx - 3, gy - 3, s * 0.55);
+      // Crack lines
+      g.lineStyle(2, 0xffee00, 0.9);
+      g.lineBetween(gx - s * 0.4, gy - s * 0.1, gx,          gy - s * 0.5);
+      g.lineBetween(gx + s * 0.3, gy + s * 0.2, gx + s * 0.05, gy - s * 0.3);
+      g.lineBetween(gx - s * 0.1, gy + s * 0.45, gx + s * 0.2, gy + s * 0.1);
+      // X eyes
+      g.lineStyle(2, 0xffffff, 1);
+      [gx - s * 0.38, gx + s * 0.12].forEach(ex => {
+        g.lineBetween(ex - s * 0.18, gy - s * 0.18, ex + s * 0.18, gy - s * 0.52);
+        g.lineBetween(ex + s * 0.18, gy - s * 0.18, ex - s * 0.18, gy - s * 0.52);
+      });
+      // Explosion radius hint
+      g.lineStyle(2, 0xff4400, 0.35);
+      g.strokeCircle(gx, gy, s + 22);
 
     } else if (e.id === 'spinner') {
       // Bullets radiating out

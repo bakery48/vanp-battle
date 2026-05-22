@@ -16,8 +16,9 @@ class EnemySpawner {
       { id: 'slime',   hp: 30,  speed: 60,  damage: 5,  exp: 5,  gold: 3,  size: 14, color: 0x66cc44 },
       { id: 'bat',     hp: 15,  speed: 100, damage: 3,  exp: 8,  gold: 2,  size: 10, color: 0x8844cc },
       { id: 'golem',   hp: 100, speed: 30,  damage: 15, exp: 20, gold: 10, size: 20, color: 0x888888 },
-      { id: 'archer',  hp: 45,  speed: 50,  damage: 3,  exp: 12, gold: 5,  size: 13, color: 0xcc7722, bulletDamage: 10, shootInterval: 2000 },
-      { id: 'spinner', hp: 35,  speed: 35,  damage: 3,  exp: 15, gold: 6,  size: 14, color: 0xbb33bb, bulletDamage: 6,  shootInterval: 2800 },
+      { id: 'archer',   hp: 45,  speed: 50,  damage: 3,  exp: 12, gold: 5,  size: 13, color: 0xcc7722, bulletDamage: 10, shootInterval: 2000 },
+      { id: 'spinner',  hp: 35,  speed: 35,  damage: 3,  exp: 15, gold: 6,  size: 14, color: 0xbb33bb, bulletDamage: 6,  shootInterval: 2800 },
+      { id: 'exploder', hp: 55,  speed: 60,  damage: 5,  exp: 18, gold: 8,  size: 15, color: 0xcc3300, explodeRadius: 110, explodeDamage: 38 },
     ];
   }
 
@@ -29,13 +30,15 @@ class EnemySpawner {
     let rng = Math.random();
     let typeIndex;
     if (elapsedSec < 30) {
-      typeIndex = rng < 0.85 ? 0 : 1;
-    } else if (elapsedSec < 50) {
-      typeIndex = rng < 0.45 ? 0 : rng < 0.8 ? 1 : 2;
+      typeIndex = rng < 0.85 ? 0 : 1;                                              // slime/bat
+    } else if (elapsedSec < 40) {
+      typeIndex = rng < 0.45 ? 0 : rng < 0.8 ? 1 : 2;                            // + golem
+    } else if (elapsedSec < 60) {
+      typeIndex = rng < 0.35 ? 0 : rng < 0.65 ? 1 : rng < 0.85 ? 2 : 5;         // + exploder
     } else if (elapsedSec < 70) {
-      typeIndex = rng < 0.3 ? 0 : rng < 0.55 ? 1 : rng < 0.8 ? 2 : 3;
+      typeIndex = rng < 0.25 ? 0 : rng < 0.5 ? 1 : rng < 0.7 ? 2 : rng < 0.86 ? 5 : 3; // + archer
     } else {
-      typeIndex = rng < 0.2 ? 0 : rng < 0.4 ? 1 : rng < 0.58 ? 2 : rng < 0.78 ? 3 : 4;
+      typeIndex = rng < 0.15 ? 0 : rng < 0.35 ? 1 : rng < 0.52 ? 2 : rng < 0.65 ? 5 : rng < 0.8 ? 3 : 4; // + spinner
     }
 
     const base = this.enemyTypes[typeIndex];
@@ -201,6 +204,36 @@ class EnemySpawner {
       // Center
       g.fillStyle(0xffffff, 0.9);
       g.fillCircle(0, 0, 4);
+
+    } else if (t.id === 'exploder') {
+      // Jagged spikes behind body
+      g.fillStyle(0xff6600, 0.9);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        g.fillTriangle(
+          Math.cos(a) * (s + 7),       Math.sin(a) * (s + 7),
+          Math.cos(a + 0.48) * (s - 1), Math.sin(a + 0.48) * (s - 1),
+          Math.cos(a - 0.48) * (s - 1), Math.sin(a - 0.48) * (s - 1)
+        );
+      }
+      // Body
+      g.fillStyle(t.color, 1);
+      g.fillCircle(0, 0, s);
+      // Inner hot glow
+      g.fillStyle(0xff8800, 0.5);
+      g.fillCircle(-2, -2, s * 0.55);
+      // Crack lines (glowing yellow)
+      g.lineStyle(2, 0xffee00, 0.85);
+      g.lineBetween(-s * 0.4, -s * 0.1, 0, -s * 0.5);
+      g.lineBetween( s * 0.3,  s * 0.2, s * 0.05, -s * 0.3);
+      g.lineBetween(-s * 0.1,  s * 0.45, s * 0.2,  s * 0.1);
+      // X eyes (danger)
+      g.lineStyle(2, 0xffffff, 1);
+      const eyes = [-6, 5];
+      eyes.forEach(ex => {
+        g.lineBetween(ex - 3, -s * 0.25, ex + 3, -s * 0.52);
+        g.lineBetween(ex + 3, -s * 0.25, ex - 3, -s * 0.52);
+      });
     }
   }
 
@@ -357,10 +390,59 @@ class EnemySpawner {
     });
 
     if (enemy.hp <= 0) {
+      if (enemy.id === 'exploder') this._explode(enemy);
       this.destroyEnemy(enemy);
       return true;
     }
     return false;
+  }
+
+  _explode(e) {
+    const RADIUS = e.explodeRadius || 110;
+    const DAMAGE = e.explodeDamage || 38;
+
+    // Inner fireball
+    const core = this.scene.add.graphics();
+    core.fillStyle(0xffff88, 1);
+    core.fillCircle(0, 0, 14);
+    core.x = e.x; core.y = e.y;
+    core.setDepth(16);
+    this.scene.tweens.add({
+      targets: core,
+      scaleX: 5, scaleY: 5, alpha: 0,
+      duration: 260, ease: 'Power1Out',
+      onComplete: () => core.destroy(),
+    });
+
+    // Outer blast cloud
+    const blast = this.scene.add.graphics();
+    blast.fillStyle(0xff5500, 0.75);
+    blast.fillCircle(0, 0, 20);
+    blast.x = e.x; blast.y = e.y;
+    blast.setDepth(15);
+    this.scene.tweens.add({
+      targets: blast,
+      scaleX: RADIUS / 20, scaleY: RADIUS / 20, alpha: 0,
+      duration: 420, ease: 'Power2Out',
+      onComplete: () => blast.destroy(),
+    });
+
+    // Shockwave ring
+    const ring = this.scene.add.graphics();
+    ring.lineStyle(4, 0xff8800, 1);
+    ring.strokeCircle(0, 0, 10);
+    ring.x = e.x; ring.y = e.y;
+    ring.setDepth(16);
+    this.scene.tweens.add({
+      targets: ring,
+      scaleX: RADIUS / 10, scaleY: RADIUS / 10, alpha: 0,
+      duration: 500, ease: 'Power2Out',
+      onComplete: () => ring.destroy(),
+    });
+
+    if (this.scene.onExplosion) {
+      this.scene.onExplosion(e.x, e.y, RADIUS, DAMAGE);
+    }
   }
 
   destroyEnemy(enemy) {

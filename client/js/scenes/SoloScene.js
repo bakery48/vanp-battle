@@ -114,6 +114,18 @@ class SoloScene extends Phaser.Scene {
       }
     };
 
+    this.onExplosion = (x, y, radius, damage) => {
+      if (this.isPaused) return;
+      const dx = this.playerX - x;
+      const dy = this.playerY - y;
+      if (Math.hypot(dx, dy) < radius) {
+        this.stats.hp = Math.max(0, this.stats.hp - damage);
+        this._updatePlayerHpBar();
+        this._flashPlayer();
+        if (this.stats.hp <= 0) this._playerDied();
+      }
+    };
+
     this.onEnemyKilled = (enemy) => {
       this.stats.gold += enemy.gold;
       this.stats.score += enemy.exp;
