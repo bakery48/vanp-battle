@@ -1,14 +1,12 @@
-// LobbyScene.js - Lobby UI for creating/joining rooms
 class LobbyScene extends Phaser.Scene {
   constructor() {
     super({ key: 'LobbyScene' });
     this.uiContainer = null;
     this.playerListText = null;
     this.roundsText = null;
-    this.statusText = null;
-    this.startBtn = null;
     this.errorText = null;
     this._handlers = [];
+    this._domInputs = [];
   }
 
   create() {
@@ -17,7 +15,7 @@ class LobbyScene extends Phaser.Scene {
 
     // Background
     const bg = this.add.graphics();
-    bg.fillGradientStyle(0x1a1a2e, 0x1a1a2e, 0x16213e, 0x16213e, 1);
+    bg.fillStyle(0x1a1a2e, 1);
     bg.fillRect(0, 0, W, H);
 
     // Title
@@ -34,7 +32,6 @@ class LobbyScene extends Phaser.Scene {
       color: '#aabbcc',
     }).setOrigin(0.5);
 
-    // Show state
     if (window.network.roomCode) {
       this._showLobbyRoom();
     } else {
@@ -81,7 +78,7 @@ class LobbyScene extends Phaser.Scene {
     this._addHandler('rounds_updated', (data) => {
       window.network.totalRounds = data.totalRounds;
       if (this.roundsText) {
-        this.roundsText.setText(`ラウンド数: ${data.totalRounds}`);
+        this.roundsText.setText(`${data.totalRounds}`);
       }
     });
 
@@ -96,10 +93,26 @@ class LobbyScene extends Phaser.Scene {
       }
     });
 
-    this._addHandler('connected', () => {});
     this._addHandler('disconnected', () => {
       this._showError('サーバーとの接続が切れました');
     });
+  }
+
+  // --- Canvas offset helper for DOM element positioning ---
+  _canvasOffset() {
+    const canvas = this.sys.game.canvas;
+    const rect = canvas.getBoundingClientRect();
+    return { left: rect.left, top: rect.top };
+  }
+
+  _addDomInput(el) {
+    document.body.appendChild(el);
+    this._domInputs.push(el);
+  }
+
+  _removeDomInputs() {
+    this._domInputs.forEach(el => { try { el.remove(); } catch(e) {} });
+    this._domInputs = [];
   }
 
   _addHandler(event, fn) {
@@ -110,47 +123,50 @@ class LobbyScene extends Phaser.Scene {
   _cleanup() {
     this._handlers.forEach(({ event, fn }) => window.network.off(event, fn));
     this._handlers = [];
-    if (this.uiContainer) this.uiContainer.destroy(true);
+    this._removeDomInputs();
+    if (this.uiContainer) { this.uiContainer.destroy(true); this.uiContainer = null; }
   }
 
   _clearUI() {
-    if (this.uiContainer) this.uiContainer.destroy(true);
+    this._removeDomInputs();
+    if (this.uiContainer) { this.uiContainer.destroy(true); }
     this.uiContainer = this.add.container(0, 0);
     this.playerListText = null;
     this.roundsText = null;
-    this.startBtn = null;
     this.errorText = null;
+  }
+
+  _panel(graphics, x, y, w, h) {
+    graphics.fillStyle(0x0f3460, 0.95);
+    graphics.fillRoundedRect(x, y, w, h, 12);
+    graphics.lineStyle(2, 0x4488ff, 1);
+    graphics.strokeRoundedRect(x, y, w, h, 12);
   }
 
   _showNameEntry() {
     this._clearUI();
     const W = this.scale.width;
+    const offset = this._canvasOffset();
 
-    // Panel background
     const panel = this.add.graphics();
-    panel.fillStyle(0x0f3460, 0.9);
-    panel.strokeStyle(0x4488ff, 1);
-    panel.lineWidth = 2;
-    panel.fillRoundedRect(W / 2 - 280, 160, 560, 380, 12);
-    panel.strokeRoundedRect(W / 2 - 280, 160, 560, 380, 12);
+    this._panel(panel, W / 2 - 280, 155, 560, 390);
     this.uiContainer.add(panel);
 
-    // Name input label
-    const nameLbl = this.add.text(W / 2, 200, 'プレイヤー名', {
-      fontSize: '20px', color: '#aabbcc'
+    const nameLbl = this.add.text(W / 2, 195, 'プレイヤー名', {
+      fontSize: '20px', color: '#aabbcc',
     }).setOrigin(0.5);
     this.uiContainer.add(nameLbl);
 
-    // Name input DOM
+    // DOM: name input
     const nameEl = document.createElement('input');
     nameEl.type = 'text';
     nameEl.placeholder = 'Player1';
     nameEl.maxLength = 12;
     nameEl.value = localStorage.getItem('vanp_name') || '';
     Object.assign(nameEl.style, {
-      position: 'absolute',
-      left: `${W / 2 - 150}px`,
-      top: '230px',
+      position: 'fixed',
+      left: `${offset.left + W / 2 - 150}px`,
+      top:  `${offset.top + 220}px`,
       width: '300px',
       padding: '8px 12px',
       fontSize: '18px',
@@ -159,27 +175,27 @@ class LobbyScene extends Phaser.Scene {
       border: '2px solid #4488ff',
       borderRadius: '6px',
       outline: 'none',
+      zIndex: '10',
     });
-    document.body.appendChild(nameEl);
-    this.uiContainer.once('destroy', () => nameEl.remove());
+    this._addDomInput(nameEl);
 
-    // Room code input label
-    const codeLbl = this.add.text(W / 2, 300, 'ルームコード（参加する場合）', {
-      fontSize: '16px', color: '#aabbcc'
+    const codeLbl = this.add.text(W / 2, 290, 'ルームコード（参加する場合）', {
+      fontSize: '16px', color: '#aabbcc',
     }).setOrigin(0.5);
     this.uiContainer.add(codeLbl);
 
+    // DOM: room code input
     const codeEl = document.createElement('input');
     codeEl.type = 'text';
     codeEl.placeholder = 'XXXX';
     codeEl.maxLength = 4;
     Object.assign(codeEl.style, {
-      position: 'absolute',
-      left: `${W / 2 - 100}px`,
-      top: '325px',
-      width: '200px',
+      position: 'fixed',
+      left:  `${offset.left + W / 2 - 80}px`,
+      top:   `${offset.top + 312}px`,
+      width: '160px',
       padding: '8px 12px',
-      fontSize: '18px',
+      fontSize: '20px',
       background: '#1a2a4a',
       color: '#ffff88',
       border: '2px solid #aabbcc',
@@ -187,21 +203,19 @@ class LobbyScene extends Phaser.Scene {
       outline: 'none',
       textAlign: 'center',
       textTransform: 'uppercase',
-      letterSpacing: '4px',
+      letterSpacing: '6px',
+      zIndex: '10',
     });
-    document.body.appendChild(codeEl);
-    this.uiContainer.once('destroy', () => codeEl.remove());
+    this._addDomInput(codeEl);
 
-    // Create room button
-    const createBtn = this._makeButton(W / 2 - 130, 400, 220, 50, 'ルームを作成', 0x2255aa, () => {
+    const createBtn = this._makeButton(W / 2 - 110, 400, 190, 48, 'ルームを作成', 0x2255aa, () => {
       const name = nameEl.value.trim() || 'Player';
       localStorage.setItem('vanp_name', name);
       window.network.createRoom(name, window.network.totalRounds || 3);
     });
     this.uiContainer.add(createBtn);
 
-    // Join room button
-    const joinBtn = this._makeButton(W / 2 + 110, 400, 180, 50, '参加する', 0x22aa55, () => {
+    const joinBtn = this._makeButton(W / 2 + 110, 400, 170, 48, '参加する', 0x22aa55, () => {
       const code = codeEl.value.trim().toUpperCase();
       if (code.length !== 4) {
         this._showError('4文字のルームコードを入力してください');
@@ -213,8 +227,8 @@ class LobbyScene extends Phaser.Scene {
     });
     this.uiContainer.add(joinBtn);
 
-    const errTxt = this.add.text(W / 2, 470, '', {
-      fontSize: '16px', color: '#ff6666'
+    const errTxt = this.add.text(W / 2, 468, '', {
+      fontSize: '15px', color: '#ff6666',
     }).setOrigin(0.5);
     this.uiContainer.add(errTxt);
     this.errorText = errTxt;
@@ -223,59 +237,40 @@ class LobbyScene extends Phaser.Scene {
   _showLobbyRoom() {
     this._clearUI();
     const W = this.scale.width;
-    const H = this.scale.height;
 
-    // Panel
     const panel = this.add.graphics();
-    panel.fillStyle(0x0f3460, 0.9);
-    panel.strokeStyle(0x4488ff, 1);
-    panel.lineWidth = 2;
-    panel.fillRoundedRect(W / 2 - 320, 140, 640, 500, 12);
-    panel.strokeRoundedRect(W / 2 - 320, 140, 640, 500, 12);
+    this._panel(panel, W / 2 - 320, 140, 640, 500);
     this.uiContainer.add(panel);
 
-    // Room code display
     const codeDisplay = this.add.text(W / 2, 175, `ルームコード: ${window.network.roomCode}`, {
-      fontSize: '28px',
-      fontStyle: 'bold',
-      color: '#f0c040',
+      fontSize: '28px', fontStyle: 'bold', color: '#f0c040',
     }).setOrigin(0.5);
     this.uiContainer.add(codeDisplay);
 
-    // Player list
-    const listLbl = this.add.text(W / 2, 215, 'プレイヤー', {
-      fontSize: '18px', color: '#aabbcc'
+    this.add.text(W / 2, 215, 'プレイヤー', {
+      fontSize: '18px', color: '#aabbcc',
     }).setOrigin(0.5);
-    this.uiContainer.add(listLbl);
 
-    // Player list text (dynamic)
-    const playerList = this.add.text(W / 2, 280, '', {
-      fontSize: '18px',
-      color: '#ffffff',
-      align: 'center',
-      lineSpacing: 10,
+    const playerList = this.add.text(W / 2, 340, '', {
+      fontSize: '18px', color: '#ffffff', align: 'center', lineSpacing: 8,
     }).setOrigin(0.5);
     this.uiContainer.add(playerList);
     this.playerListText = playerList;
     this._updatePlayerList();
 
-    // Rounds config (host only)
     if (window.network.isHost()) {
-      const roundsLbl = this.add.text(W / 2 - 100, 440, 'ラウンド数:', {
-        fontSize: '18px', color: '#aabbcc'
+      const roundsLbl = this.add.text(W / 2 - 110, 450, 'ラウンド数:', {
+        fontSize: '18px', color: '#aabbcc',
       }).setOrigin(0, 0.5);
       this.uiContainer.add(roundsLbl);
 
-      const roundsTxt = this.add.text(W / 2 + 20, 440, `${window.network.totalRounds}`, {
-        fontSize: '22px',
-        fontStyle: 'bold',
-        color: '#f0c040',
+      const roundsTxt = this.add.text(W / 2 + 30, 450, `${window.network.totalRounds}`, {
+        fontSize: '24px', fontStyle: 'bold', color: '#f0c040',
       }).setOrigin(0.5);
       this.uiContainer.add(roundsTxt);
       this.roundsText = roundsTxt;
 
-      // Minus button
-      const minusBtn = this._makeButton(W / 2 - 40, 440, 50, 36, '-', 0x553322, () => {
+      const minusBtn = this._makeButton(W / 2 - 30, 450, 44, 34, '-', 0x553322, () => {
         const r = Math.max(1, window.network.totalRounds - 1);
         window.network.setRounds(r);
         window.network.totalRounds = r;
@@ -283,8 +278,7 @@ class LobbyScene extends Phaser.Scene {
       });
       this.uiContainer.add(minusBtn);
 
-      // Plus button
-      const plusBtn = this._makeButton(W / 2 + 70, 440, 50, 36, '+', 0x335522, () => {
+      const plusBtn = this._makeButton(W / 2 + 80, 450, 44, 34, '+', 0x335522, () => {
         const r = Math.min(5, window.network.totalRounds + 1);
         window.network.setRounds(r);
         window.network.totalRounds = r;
@@ -292,28 +286,25 @@ class LobbyScene extends Phaser.Scene {
       });
       this.uiContainer.add(plusBtn);
 
-      // Start button
-      const startBtn = this._makeButton(W / 2, 510, 240, 56, 'ゲームスタート', 0xcc3300, () => {
+      const startBtn = this._makeButton(W / 2, 520, 240, 54, 'ゲームスタート', 0xcc3300, () => {
         window.network.startGame();
       });
       this.uiContainer.add(startBtn);
     } else {
-      const waitTxt = this.add.text(W / 2, 480, 'ホストのゲーム開始を待っています...', {
-        fontSize: '18px', color: '#aabbcc'
+      const roundsTxt = this.add.text(W / 2, 450, `ラウンド数: ${window.network.totalRounds}`, {
+        fontSize: '18px', color: '#aabbcc',
+      }).setOrigin(0.5);
+      this.uiContainer.add(roundsTxt);
+      this.roundsText = roundsTxt;
+
+      const waitTxt = this.add.text(W / 2, 500, 'ホストのゲーム開始を待っています...', {
+        fontSize: '17px', color: '#aabbcc',
       }).setOrigin(0.5);
       this.uiContainer.add(waitTxt);
-
-      if (this.roundsText === null) {
-        const roundsTxt = this.add.text(W / 2, 440, `ラウンド数: ${window.network.totalRounds}`, {
-          fontSize: '18px', color: '#aabbcc'
-        }).setOrigin(0.5);
-        this.uiContainer.add(roundsTxt);
-        this.roundsText = roundsTxt;
-      }
     }
 
-    const errTxt = this.add.text(W / 2, 570, '', {
-      fontSize: '16px', color: '#ff6666'
+    const errTxt = this.add.text(W / 2, 575, '', {
+      fontSize: '15px', color: '#ff6666',
     }).setOrigin(0.5);
     this.uiContainer.add(errTxt);
     this.errorText = errTxt;
@@ -321,12 +312,12 @@ class LobbyScene extends Phaser.Scene {
 
   _updatePlayerList() {
     if (!this.playerListText) return;
-    const colors = ['#ff6666', '#6699ff', '#66cc66', '#ffee55', '#cc88ff', '#ff9944', '#55dddd', '#ff99cc'];
-    const lines = (window.network.players || []).map(p => {
-      const colorHex = colors[p.colorIndex % colors.length];
+    const colorNames = ['■(赤)', '■(青)', '■(緑)', '■(黄)', '■(紫)', '■(橙)', '■(水)', '■(桃)'];
+    const lines = (window.network.players || []).map((p, i) => {
+      const marker = colorNames[p.colorIndex % colorNames.length] || '■';
       const hostMark = p.id === window.network.hostId ? ' [HOST]' : '';
-      const meMark = p.id === window.network.myId ? ' ←' : '';
-      return `[color=${colorHex}]■[/color] ${p.name}${hostMark}${meMark}`;
+      const meMark   = p.id === window.network.myId   ? ' ←'     : '';
+      return `${marker} ${p.name}${hostMark}${meMark}`;
     });
     this.playerListText.setText(lines.join('\n'));
   }
@@ -350,36 +341,31 @@ class LobbyScene extends Phaser.Scene {
     bg.strokeRoundedRect(-w / 2, -h / 2, w, h, 8);
 
     const txt = this.add.text(0, 0, label, {
-      fontSize: Math.min(20, Math.floor(h * 0.5)) + 'px',
+      fontSize: Math.min(20, Math.floor(h * 0.48)) + 'px',
       fontStyle: 'bold',
       color: '#ffffff',
     }).setOrigin(0.5);
 
-    const hitArea = this.add.rectangle(0, 0, w, h, 0xffffff, 0)
+    const hit = this.add.rectangle(0, 0, w, h, 0xffffff, 0)
       .setInteractive({ useHandCursor: true });
 
-    hitArea.on('pointerover', () => {
+    const redraw = (hover) => {
       bg.clear();
-      bg.fillStyle(bgColor + 0x303030, 1);
+      bg.fillStyle(hover ? bgColor + 0x202020 : bgColor, 1);
       bg.fillRoundedRect(-w / 2, -h / 2, w, h, 8);
-      bg.lineStyle(2, 0xffffff, 0.6);
+      bg.lineStyle(2, 0xffffff, hover ? 0.7 : 0.3);
       bg.strokeRoundedRect(-w / 2, -h / 2, w, h, 8);
-    });
-    hitArea.on('pointerout', () => {
-      bg.clear();
-      bg.fillStyle(bgColor, 1);
-      bg.fillRoundedRect(-w / 2, -h / 2, w, h, 8);
-      bg.lineStyle(2, 0xffffff, 0.3);
-      bg.strokeRoundedRect(-w / 2, -h / 2, w, h, 8);
-    });
-    hitArea.on('pointerdown', onClick);
+    };
 
-    container.add([bg, txt, hitArea]);
+    hit.on('pointerover',  () => redraw(true));
+    hit.on('pointerout',   () => redraw(false));
+    hit.on('pointerdown',  onClick);
+
+    container.add([bg, txt, hit]);
     return container;
   }
 
   shutdown() {
-    // Remove DOM inputs if any remain
-    document.querySelectorAll('input').forEach(el => el.remove());
+    this._cleanup();
   }
 }
