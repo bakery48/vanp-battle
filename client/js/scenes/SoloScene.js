@@ -73,13 +73,16 @@ class SoloScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, worldW, worldH);
     this.cameras.main.startFollow(this.playerGfx, true, 0.1, 0.1);
 
-    // Input
+    // Input - force canvas focus so keyboard events reach Phaser
+    this.sys.game.canvas.setAttribute('tabindex', '0');
+    this.sys.game.canvas.focus();
     this.cursors = this.input.keyboard.addKeys({
       up: Phaser.Input.Keyboard.KeyCodes.W,
       down: Phaser.Input.Keyboard.KeyCodes.S,
       left: Phaser.Input.Keyboard.KeyCodes.A,
       right: Phaser.Input.Keyboard.KeyCodes.D,
     });
+    this.input.keyboard.resetKeys();
 
     // Systems
     this.enemySpawner = new EnemySpawner(this, { x: this.playerX, y: this.playerY });

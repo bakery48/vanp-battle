@@ -49,13 +49,16 @@ class BattleScene extends Phaser.Scene {
     // Camera
     this.cameras.main.setBounds(0, 0, worldW, worldH);
 
-    // Input
+    // Input - force canvas focus
+    this.sys.game.canvas.setAttribute('tabindex', '0');
+    this.sys.game.canvas.focus();
     this.cursors = this.input.keyboard.addKeys({
       up: Phaser.Input.Keyboard.KeyCodes.W,
       down: Phaser.Input.Keyboard.KeyCodes.S,
       left: Phaser.Input.Keyboard.KeyCodes.A,
       right: Phaser.Input.Keyboard.KeyCodes.D,
     });
+    this.input.keyboard.resetKeys();
 
     // Create player sprites from initial battle state
     const myId = window.network.myId;
