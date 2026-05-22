@@ -60,7 +60,7 @@ class BlockSystem {
       return null;
     };
 
-    for (let i = 0; this.blocks.length < 78 && i < 400; i++) {
+    for (let i = 0; this.blocks.length < 16 && i < 200; i++) {
       const shape = shapes[Math.floor(Math.random() * shapes.length)];
       const b = tryPlace(shape);
       if (b) this.blocks.push(b);
