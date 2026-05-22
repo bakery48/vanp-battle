@@ -5,7 +5,7 @@ const config = {
   height: 720,
   backgroundColor: '#1a1a2e',
   parent: document.body,
-  scene: [LobbyScene, SoloScene, ShopScene, BattleScene],
+  scene: [LobbyScene, SoloScene, ShopScene, BattleScene, BestiaryScene],
   physics: {
     default: 'arcade',
     arcade: { gravity: { y: 0 }, debug: false }

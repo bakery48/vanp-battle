@@ -208,6 +208,20 @@ class SoloScene extends Phaser.Scene {
       fontSize: '16px', color: '#aabbcc',
     }).setScrollFactor(0).setDepth(101);
 
+    // 図鑑ボタン
+    const bestiaryHit = this.add.text(W - 160, 52, '📖 図鑑', {
+      fontSize: '14px', color: '#88aacc',
+      backgroundColor: '#112233',
+      padding: { x: 6, y: 3 },
+    }).setScrollFactor(0).setDepth(102).setInteractive({ useHandCursor: true });
+    bestiaryHit.on('pointerdown', () => {
+      this.isPaused = true;
+      this.scene.launch('BestiaryScene');
+      this.scene.get('BestiaryScene').events.once('shutdown', () => {
+        this.isPaused = false;
+      });
+    });
+
     // EXP bar (below HUD)
     this.expBarBg = this.add.graphics();
     this.expBarBg.fillStyle(0x002200, 1);

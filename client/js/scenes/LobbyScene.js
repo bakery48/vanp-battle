@@ -35,6 +35,12 @@ class LobbyScene extends Phaser.Scene {
       color: '#aabbcc',
     }).setOrigin(0.5);
 
+    // 図鑑ボタン（右下固定）
+    const bestiaryBtn = this._makeButton(W - 90, H - 44, 150, 44, '📖 敵図鑑', 0x224466, () => {
+      this.scene.launch('BestiaryScene');
+    });
+    bestiaryBtn.setDepth(50);
+
     if (window.network.roomCode) {
       this._showLobbyRoom();
     } else {
