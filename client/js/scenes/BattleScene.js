@@ -53,12 +53,22 @@ class BattleScene extends Phaser.Scene {
     this.sys.game.canvas.setAttribute('tabindex', '0');
     this.sys.game.canvas.focus();
     this.cursors = this.input.keyboard.addKeys({
-      up: Phaser.Input.Keyboard.KeyCodes.W,
-      down: Phaser.Input.Keyboard.KeyCodes.S,
-      left: Phaser.Input.Keyboard.KeyCodes.A,
+      up:    Phaser.Input.Keyboard.KeyCodes.W,
+      down:  Phaser.Input.Keyboard.KeyCodes.S,
+      left:  Phaser.Input.Keyboard.KeyCodes.A,
       right: Phaser.Input.Keyboard.KeyCodes.D,
     });
+    this.aimKeys = this.input.keyboard.addKeys({
+      up:    Phaser.Input.Keyboard.KeyCodes.UP,
+      down:  Phaser.Input.Keyboard.KeyCodes.DOWN,
+      left:  Phaser.Input.Keyboard.KeyCodes.LEFT,
+      right: Phaser.Input.Keyboard.KeyCodes.RIGHT,
+    });
     this.input.keyboard.resetKeys();
+    this.lastAimAngle = 0;
+
+    // Aim indicator
+    this.aimIndicator = this.add.graphics().setDepth(12);
 
     // Create player sprites from initial battle state
     const myId = window.network.myId;
@@ -358,11 +368,22 @@ class BattleScene extends Phaser.Scene {
       window.network.sendBattlePosition(this.myX, this.myY);
     }
 
-    // Auto attack: find closest other alive player
+    // Aim direction from arrow keys
+    const ak = this.aimKeys;
+    const ax = (ak.right.isDown ? 1 : 0) - (ak.left.isDown ? 1 : 0);
+    const ay = (ak.down.isDown  ? 1 : 0) - (ak.up.isDown   ? 1 : 0);
+    let manualAim = null;
+    if (ax !== 0 || ay !== 0) {
+      manualAim = Math.atan2(ay, ax);
+      this.lastAimAngle = manualAim;
+    }
+    this._drawAimIndicator(manualAim);
+
+    // Attack
     this.fireTimer += delta;
     if (this.fireTimer >= me.fireRate) {
       this.fireTimer = 0;
-      this._autoAttack(me);
+      this._attack(me, manualAim);
     }
 
     // Update other players (interpolate)
@@ -373,6 +394,28 @@ class BattleScene extends Phaser.Scene {
 
     // Update HUD
     this._updateHUD();
+  }
+
+  _drawAimIndicator(aimAngle) {
+    const g = this.aimIndicator;
+    g.clear();
+    const angle = aimAngle !== null ? aimAngle : this.lastAimAngle;
+    if (angle === null || angle === undefined) return;
+
+    const dist = 28;
+    const tx = this.myX + Math.cos(angle) * dist;
+    const ty = this.myY + Math.sin(angle) * dist;
+    const tipX = this.myX + Math.cos(angle) * (dist + 10);
+    const tipY = this.myY + Math.sin(angle) * (dist + 10);
+    const perpX = -Math.sin(angle) * 5;
+    const perpY  =  Math.cos(angle) * 5;
+
+    g.fillStyle(aimAngle !== null ? 0xffffff : 0x888888, aimAngle !== null ? 1 : 0.5);
+    g.fillTriangle(
+      tipX, tipY,
+      tx + perpX, ty + perpY,
+      tx - perpX, ty - perpY
+    );
   }
 
   _updateOtherPlayers(delta) {
@@ -397,26 +440,25 @@ class BattleScene extends Phaser.Scene {
     }
   }
 
-  _autoAttack(me) {
+  _attack(me, manualAim) {
     const myId = window.network.myId;
-    let closest = null;
-    let minDist = Infinity;
 
-    for (const [id, p] of Object.entries(this.players)) {
-      if (id === myId || !p.alive) continue;
-      const dx = p.x - me.x;
-      const dy = p.y - me.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < minDist) {
-        minDist = dist;
-        closest = p;
+    let baseAngle = manualAim;
+    if (baseAngle === null) {
+      // Auto-aim: find closest alive player
+      let closest = null;
+      let minDist = Infinity;
+      for (const [id, p] of Object.entries(this.players)) {
+        if (id === myId || !p.alive) continue;
+        const dx = p.x - me.x, dy = p.y - me.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < minDist) { minDist = dist; closest = p; }
       }
+      if (!closest) return;
+      baseAngle = Math.atan2(closest.y - me.y, closest.x - me.x);
     }
 
-    if (!closest) return;
-
     const count = me.bulletCount;
-    const baseAngle = Math.atan2(closest.y - me.y, closest.x - me.x);
     const spread = count > 1 ? (Math.PI / 8) : 0;
 
     for (let i = 0; i < count; i++) {

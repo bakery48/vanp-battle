@@ -77,12 +77,24 @@ class SoloScene extends Phaser.Scene {
     this.sys.game.canvas.setAttribute('tabindex', '0');
     this.sys.game.canvas.focus();
     this.cursors = this.input.keyboard.addKeys({
-      up: Phaser.Input.Keyboard.KeyCodes.W,
-      down: Phaser.Input.Keyboard.KeyCodes.S,
-      left: Phaser.Input.Keyboard.KeyCodes.A,
+      up:    Phaser.Input.Keyboard.KeyCodes.W,
+      down:  Phaser.Input.Keyboard.KeyCodes.S,
+      left:  Phaser.Input.Keyboard.KeyCodes.A,
       right: Phaser.Input.Keyboard.KeyCodes.D,
     });
+    // Arrow keys for manual aim
+    this.aimKeys = this.input.keyboard.addKeys({
+      up:    Phaser.Input.Keyboard.KeyCodes.UP,
+      down:  Phaser.Input.Keyboard.KeyCodes.DOWN,
+      left:  Phaser.Input.Keyboard.KeyCodes.LEFT,
+      right: Phaser.Input.Keyboard.KeyCodes.RIGHT,
+    });
     this.input.keyboard.resetKeys();
+
+    // Aim direction indicator (arrow drawn in front of player)
+    this.aimIndicator = this.add.graphics();
+    this.aimIndicator.setDepth(12);
+    this.lastAimAngle = null;
 
     // Systems
     this.enemySpawner = new EnemySpawner(this, { x: this.playerX, y: this.playerY });
@@ -393,9 +405,20 @@ class SoloScene extends Phaser.Scene {
     const elapsedSec = this.elapsedMs / 1000;
     this.enemySpawner.update(delta, this.round, elapsedSec);
 
+    // Aim direction from arrow keys (null → auto-aim)
+    let aimAngle = null;
+    const ak = this.aimKeys;
+    const ax = (ak.right.isDown ? 1 : 0) - (ak.left.isDown ? 1 : 0);
+    const ay = (ak.down.isDown  ? 1 : 0) - (ak.up.isDown   ? 1 : 0);
+    if (ax !== 0 || ay !== 0) {
+      aimAngle = Math.atan2(ay, ax);
+      this.lastAimAngle = aimAngle;
+    }
+    this._drawAimIndicator(aimAngle);
+
     // Update weapon
     this.weaponSystem.stats = this.stats;
-    this.weaponSystem.update(delta, this.playerX, this.playerY, this.enemySpawner.getActiveEnemies());
+    this.weaponSystem.update(delta, this.playerX, this.playerY, this.enemySpawner.getActiveEnemies(), aimAngle);
 
     // Update exp orbs
     this._updateExpOrbs();
@@ -408,6 +431,30 @@ class SoloScene extends Phaser.Scene {
       this.elapsedMs = this.totalDuration;
       this._goToShop();
     }
+  }
+
+  _drawAimIndicator(aimAngle) {
+    const g = this.aimIndicator;
+    g.clear();
+    const angle = aimAngle !== null ? aimAngle : this.lastAimAngle;
+    if (angle === null) return;
+
+    const dist = 26; // distance from player center
+    const tx = this.playerX + Math.cos(angle) * dist;
+    const ty = this.playerY + Math.sin(angle) * dist;
+
+    // Small triangle pointing in aim direction
+    const tipX = this.playerX + Math.cos(angle) * (dist + 10);
+    const tipY = this.playerY + Math.sin(angle) * (dist + 10);
+    const perpX = -Math.sin(angle) * 5;
+    const perpY =  Math.cos(angle) * 5;
+
+    g.fillStyle(aimAngle !== null ? 0xffffff : 0x888888, aimAngle !== null ? 1 : 0.5);
+    g.fillTriangle(
+      tipX, tipY,
+      tx + perpX, ty + perpY,
+      tx - perpX, ty - perpY
+    );
   }
 
   _playerDied() {
