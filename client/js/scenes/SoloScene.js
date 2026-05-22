@@ -314,13 +314,15 @@ class SoloScene extends Phaser.Scene {
   }
 
   _checkLevelUp() {
+    if (this._isChoosingAbility) return; // wait until current choice is made
     if (this.stats.tryLevelUp()) {
       this._showAbilityChoice();
     }
   }
 
   _showAbilityChoice() {
-    this.isPaused = true;
+    if (this._isChoosingAbility) return;
+    this._isChoosingAbility = true;
     const W = this.scale.width;
     const H = this.scale.height;
 
@@ -392,7 +394,7 @@ class SoloScene extends Phaser.Scene {
         for (const el of abilityElements) {
           try { el.destroy(); } catch (e) {}
         }
-        this.isPaused = false;
+        this._isChoosingAbility = false;
         this._updateHUD();
         // Check for another level up
         this._checkLevelUp();
