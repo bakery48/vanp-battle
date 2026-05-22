@@ -434,6 +434,15 @@ class SoloScene extends Phaser.Scene {
     this.weaponSystem.stats = this.stats;
     this.weaponSystem.update(delta, this.playerX, this.playerY, this.enemySpawner.getActiveEnemies(), aimAngle);
 
+    // Update enemy bullets
+    this.enemySpawner.updateBullets(delta, this.playerX, this.playerY, (damage) => {
+      if (this.isPaused) return;
+      this.stats.hp = Math.max(0, this.stats.hp - damage);
+      this._updatePlayerHpBar();
+      this._flashPlayer();
+      if (this.stats.hp <= 0) this._playerDied();
+    });
+
     // Update exp orbs
     this._updateExpOrbs();
 
