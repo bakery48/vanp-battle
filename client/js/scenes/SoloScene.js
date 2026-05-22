@@ -496,8 +496,34 @@ class SoloScene extends Phaser.Scene {
   }
 
   _playerDied() {
-    // Player died in solo - still go to shop with current stats
-    this._goToShop();
+    this.isPaused = true;
+
+    const lost = Math.floor(this.stats.gold / 2);
+    this.stats.gold -= lost;
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+
+    const overlay = this.add.graphics();
+    overlay.fillStyle(0x000000, 0.72);
+    overlay.fillRect(0, 0, W, H);
+    overlay.setScrollFactor(0).setDepth(300);
+
+    this.add.text(W / 2, H / 2 - 60, '力尽きました…', {
+      fontSize: '44px', fontStyle: 'bold', color: '#ff4444',
+      stroke: '#000000', strokeThickness: 4,
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(301);
+
+    this.add.text(W / 2, H / 2 + 10, `ゴールド半減  -${lost}G`, {
+      fontSize: '28px', fontStyle: 'bold', color: '#ffdd44',
+      stroke: '#000000', strokeThickness: 3,
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(301);
+
+    this.add.text(W / 2, H / 2 + 60, 'ショップへ移動します…', {
+      fontSize: '20px', color: '#aabbcc',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(301);
+
+    this.time.delayedCall(2200, () => this._goToShop());
   }
 
   _goToShop() {
