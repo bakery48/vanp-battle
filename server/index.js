@@ -236,3 +236,14 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`vanp-battle server running on http://localhost:${PORT}`);
 });
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\nError: Port ${PORT} is already in use.`);
+    console.error(`Please stop the existing process or use a different port:`);
+    console.error(`  PORT=3001 npm start\n`);
+    process.exit(1);
+  } else {
+    throw err;
+  }
+});
