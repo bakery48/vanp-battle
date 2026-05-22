@@ -34,6 +34,9 @@ class NetworkManager {
       'shop_buy_result', 'shop_player_ready',
       'battle_state', 'battle_attack', 'battle_hit_confirmed',
       'player_defeated', 'shield_blocked',
+      'boss_state', 'boss_attack', 'boss_aoe_warning',
+      'mob_kill', 'mob_enemy_spawned', 'mob_enemy_positions', 'mob_end', 'mob_timer',
+      'battle_mode_updated',
     ];
     events.forEach(ev => {
       this.socket.on(ev, data => this._emit(ev, data));
@@ -118,6 +121,26 @@ class NetworkManager {
 
   returnToLobby() {
     this.send('return_to_lobby');
+  }
+
+  setBattleMode(mode) {
+    this.send('set_battle_mode', { mode });
+  }
+
+  sendBossHit(damage) {
+    this.send('boss_hit', { damage });
+  }
+
+  sendMobEnemySpawn(data) {
+    this.send('mob_enemy_spawn', data);
+  }
+
+  sendMobEnemyPositions(updates) {
+    this.send('mob_enemy_positions', updates);
+  }
+
+  sendMobHit(enemyId, damage) {
+    this.send('mob_hit', { enemyId, damage });
   }
 
   isHost() {

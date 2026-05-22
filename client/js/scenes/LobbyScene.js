@@ -10,7 +10,12 @@ class LobbyScene extends Phaser.Scene {
     this._handlers = [];
     this._domInputs = [];
     this._cpuCount = 0;
+    this._battleModeIdx = 0;
   }
+
+  static get MODES()      { return ['random','royale','boss','mob']; }
+  static get MODE_NAMES() { return { random:'ランダム', royale:'バトルロイヤル', boss:'ボス討伐', mob:'殲滅戦' }; }
+  static get MODE_ICONS() { return { random:'🎲', royale:'⚔️', boss:'👾', mob:'💀' }; }
 
   create() {
     const W = this.scale.width;
@@ -252,7 +257,7 @@ class LobbyScene extends Phaser.Scene {
     const W = this.scale.width;
 
     const panel = this.add.graphics();
-    this._panel(panel, W / 2 - 320, 140, 640, 500);
+    this._panel(panel, W / 2 - 320, 140, 640, 580);
     this.uiContainer.add(panel);
 
     const codeDisplay = this.add.text(W / 2, 175, `ルームコード: ${window.network.roomCode}`, {
@@ -331,7 +336,36 @@ class LobbyScene extends Phaser.Scene {
         this.uiContainer.add(plusCpu);
       }
 
-      const startBtn = this._makeButton(W / 2, 530, 240, 54, 'ゲームスタート', 0xcc3300, () => {
+      // ── バトルモード ──
+      const modeLbl = this.add.text(W / 2 - 110, 510, 'バトルモード:', {
+        fontSize: '18px', color: '#aabbcc',
+      }).setOrigin(0, 0.5);
+      this.uiContainer.add(modeLbl);
+
+      const modes = ['random', 'royale', 'boss', 'mob'];
+      const modeNames = { random: 'ランダム', royale: 'バトルロイヤル', boss: 'ボス討伐', mob: '殲滅戦' };
+      let currentModeIdx = 0;
+
+      const modeTxt = this.add.text(W / 2 + 20, 510, modeNames[modes[currentModeIdx]], {
+        fontSize: '20px', fontStyle: 'bold', color: '#f0c040',
+      }).setOrigin(0.5);
+      this.uiContainer.add(modeTxt);
+
+      const prevModeBtn = this._makeButton(W / 2 - 60, 510, 36, 34, '◀', 0x333366, () => {
+        currentModeIdx = (currentModeIdx - 1 + modes.length) % modes.length;
+        modeTxt.setText(modeNames[modes[currentModeIdx]]);
+        window.network.setBattleMode(modes[currentModeIdx]);
+      });
+      this.uiContainer.add(prevModeBtn);
+
+      const nextModeBtn = this._makeButton(W / 2 + 100, 510, 36, 34, '▶', 0x333366, () => {
+        currentModeIdx = (currentModeIdx + 1) % modes.length;
+        modeTxt.setText(modeNames[modes[currentModeIdx]]);
+        window.network.setBattleMode(modes[currentModeIdx]);
+      });
+      this.uiContainer.add(nextModeBtn);
+
+      const startBtn = this._makeButton(W / 2, 600, 240, 54, 'ゲームスタート', 0xcc3300, () => {
         window.network.startGame();
       });
       this.uiContainer.add(startBtn);
@@ -348,7 +382,7 @@ class LobbyScene extends Phaser.Scene {
       this.uiContainer.add(waitTxt);
     }
 
-    const errTxt = this.add.text(W / 2, 575, '', {
+    const errTxt = this.add.text(W / 2, 655, '', {
       fontSize: '15px', color: '#ff6666',
     }).setOrigin(0.5);
     this.uiContainer.add(errTxt);

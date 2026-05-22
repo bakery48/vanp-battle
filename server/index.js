@@ -178,6 +178,48 @@ io.on('connection', (socket) => {
     room.playerDefeated(socket.id, killedBy);
   });
 
+  // Host sets battle mode
+  socket.on('set_battle_mode', ({ mode }) => {
+    const code = playerRoom[socket.id];
+    const room = rooms[code];
+    if (!room) return;
+    if (room.setBattleMode(mode, socket.id)) {
+      socket.emit('battle_mode_updated', { battleMode: room.battleMode });
+    }
+  });
+
+  // Boss hit
+  socket.on('boss_hit', ({ damage }) => {
+    const code = playerRoom[socket.id];
+    const room = rooms[code];
+    if (!room || room.selectedMode !== 'boss') return;
+    room.processBossHit(socket.id, damage);
+  });
+
+  // Mob: enemy spawn (host spawns, relay to others)
+  socket.on('mob_enemy_spawn', (enemyData) => {
+    const code = playerRoom[socket.id];
+    const room = rooms[code];
+    if (!room) return;
+    room.addMobEnemy(enemyData.id, enemyData.x, enemyData.y, enemyData.hp, enemyData.type);
+    socket.to(code).emit('mob_enemy_spawned', enemyData);
+  });
+
+  // Mob: enemy position broadcast (host only)
+  socket.on('mob_enemy_positions', (updates) => {
+    const code = playerRoom[socket.id];
+    if (!code) return;
+    socket.to(code).emit('mob_enemy_positions', updates);
+  });
+
+  // Mob: hit enemy
+  socket.on('mob_hit', ({ enemyId, damage }) => {
+    const code = playerRoom[socket.id];
+    const room = rooms[code];
+    if (!room || room.selectedMode !== 'mob') return;
+    room.processMobHit(socket.id, enemyId, damage);
+  });
+
   // Return to lobby
   socket.on('return_to_lobby', () => {
     const code = playerRoom[socket.id];

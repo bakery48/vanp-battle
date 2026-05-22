@@ -31,6 +31,16 @@ class GameRoom {
     this.currentRound = 0;
     this.phaseTimer = null;
     this.shopReadySet = new Set();
+
+    // Battle mode
+    this.battleMode = 'random'; // 'random'|'royale'|'boss'|'mob'
+    this.selectedMode = null;   // actual mode chosen
+    this.bossState = null;      // boss mode state
+    this.mobState = null;       // mob mode state
+    this.mobEnemies = {};       // enemyId -> { hp, maxHp, active, killedBy }
+    this.mobTimer = null;
+    this.bossAttackTimer = null;
+    this.bossSpreadTimer = null;
   }
 
   // ── Human player management ──────────────────────────────────────
@@ -78,7 +88,11 @@ class GameRoom {
       this.hostId = remaining.length > 0 ? remaining[0] : null;
     }
 
-    if (this.phase === PHASES.BATTLE) this._checkBattleEnd();
+    if (this.phase === PHASES.BATTLE) {
+      if (this.selectedMode === 'royale') {
+        this._checkBattleEnd();
+      }
+    }
   }
 
   getPlayerCount() { return Object.keys(this.players).length; }
@@ -103,6 +117,13 @@ class GameRoom {
     if (Object.keys(this.players).length > 1) return false; // only in solo mode
     this.cpuCount = Math.max(0, Math.min(7, count));
     this._rebuildBots();
+    return true;
+  }
+
+  setBattleMode(mode, socketId) {
+    if (socketId !== this.hostId) return false;
+    if (!['random', 'royale', 'boss', 'mob'].includes(mode)) return false;
+    this.battleMode = mode;
     return true;
   }
 
@@ -154,7 +175,9 @@ class GameRoom {
       id: botId, name: bot.name, killedBy: null,
     });
 
-    this._checkBattleEnd();
+    if (this.selectedMode === 'royale' || this.selectedMode === null) {
+      this._checkBattleEnd();
+    }
   }
 
   // ── Phase management ─────────────────────────────────────────────
@@ -255,6 +278,14 @@ class GameRoom {
   _startBattlePhase() {
     this.phase = PHASES.BATTLE;
 
+    // Determine selected mode
+    if (this.battleMode === 'random') {
+      const modes = ['royale', 'boss', 'mob'];
+      this.selectedMode = modes[Math.floor(Math.random() * modes.length)];
+    } else {
+      this.selectedMode = this.battleMode;
+    }
+
     // Scale bot stats before battle
     Object.values(this.bots).forEach(bot => this._scaleBotStats(bot, this.totalRounds));
 
@@ -277,13 +308,168 @@ class GameRoom {
     const battleState = {};
     allCombatants.forEach(p => { battleState[p.id] = this._getBattlePlayerData(p); });
 
+    // Embed mode in battleState
+    battleState.__mode = this.selectedMode;
+
+    // Initialize mode-specific state
+    if (this.selectedMode === 'boss') {
+      const bossMaxHp = 3000 * this.totalRounds;
+      this.bossState = {
+        hp: bossMaxHp,
+        maxHp: bossMaxHp,
+        x: 750,
+        y: 750,
+        damages: {},
+      };
+
+      // Boss attack timer: normal attacks every 2 seconds
+      this.bossAttackTimer = setInterval(() => {
+        if (this.phase !== PHASES.BATTLE) return;
+        const players = Object.values(this.players).filter(p => p.alive);
+        const angles = players.map(p => Math.atan2(p.y - 750, p.x - 750));
+        if (angles.length > 0) {
+          this.io.to(this.roomCode).emit('boss_attack', { angles, type: 'normal', damage: 15 });
+        }
+      }, 2000);
+
+      // Boss spread attack every 8 seconds
+      this.bossSpreadTimer = setInterval(() => {
+        if (this.phase !== PHASES.BATTLE) return;
+        const angles = Array.from({ length: 8 }, (_, i) => i * Math.PI / 4);
+        this.io.to(this.roomCode).emit('boss_aoe_warning', { duration: 1500 });
+        setTimeout(() => {
+          if (this.phase !== PHASES.BATTLE) return;
+          this.io.to(this.roomCode).emit('boss_attack', { angles, type: 'spread', damage: 25 });
+        }, 1500);
+      }, 8000);
+
+    } else if (this.selectedMode === 'mob') {
+      const kills = {};
+      Object.keys(this.players).forEach(id => { kills[id] = 0; });
+
+      this.mobState = {
+        kills,
+        timer: 90,
+      };
+      this.mobEnemies = {};
+
+      // 90 second countdown timer
+      this.mobTimer = setInterval(() => {
+        if (this.phase !== PHASES.BATTLE) return;
+        this.mobState.timer--;
+        this.io.to(this.roomCode).emit('mob_timer', { timeLeft: this.mobState.timer });
+        if (this.mobState.timer <= 0) {
+          this._endMobMode();
+        }
+      }, 1000);
+    }
+
     this.io.to(this.roomCode).emit('phase_change', {
       phase: PHASES.BATTLE,
       round: this.currentRound,
       totalRounds: this.totalRounds,
       battleState,
+      battleMode: this.selectedMode,
     });
   }
+
+  // ── Boss mode ────────────────────────────────────────────────────
+
+  processBossHit(socketId, damage) {
+    if (!this.bossState) return;
+    const p = this.players[socketId];
+    if (!p || !p.alive) return;
+
+    this.bossState.hp = Math.max(0, this.bossState.hp - damage);
+    if (!this.bossState.damages[socketId]) this.bossState.damages[socketId] = 0;
+    this.bossState.damages[socketId] += damage;
+
+    this.io.to(this.roomCode).emit('boss_state', {
+      hp: this.bossState.hp,
+      maxHp: this.bossState.maxHp,
+      damages: this.bossState.damages,
+    });
+
+    if (this.bossState.hp <= 0) {
+      this._endBossMode();
+    }
+  }
+
+  _endBossMode() {
+    this._clearBossTimers();
+
+    // Find max damage player
+    let winnerId = null;
+    let maxDmg = -1;
+    for (const [id, dmg] of Object.entries(this.bossState.damages)) {
+      if (dmg > maxDmg) {
+        maxDmg = dmg;
+        winnerId = id;
+      }
+    }
+
+    const winner = winnerId ? this.players[winnerId] : null;
+    this._endBattle(winner);
+  }
+
+  _clearBossTimers() {
+    if (this.bossAttackTimer) { clearInterval(this.bossAttackTimer); this.bossAttackTimer = null; }
+    if (this.bossSpreadTimer) { clearInterval(this.bossSpreadTimer); this.bossSpreadTimer = null; }
+  }
+
+  // ── Mob mode ─────────────────────────────────────────────────────
+
+  addMobEnemy(id, x, y, hp, type) {
+    this.mobEnemies[id] = { hp, maxHp: hp, active: true, type };
+  }
+
+  processMobHit(socketId, enemyId, damage) {
+    const enemy = this.mobEnemies[enemyId];
+    if (!enemy || !enemy.active) return;
+
+    enemy.hp -= damage;
+
+    if (enemy.hp <= 0) {
+      enemy.active = false;
+      enemy.killedBy = socketId;
+
+      if (this.mobState && this.mobState.kills[socketId] !== undefined) {
+        this.mobState.kills[socketId]++;
+      } else if (this.mobState) {
+        this.mobState.kills[socketId] = 1;
+      }
+
+      this.io.to(this.roomCode).emit('mob_kill', {
+        enemyId,
+        killedBy: socketId,
+        kills: this.mobState ? this.mobState.kills : {},
+      });
+    }
+  }
+
+  _endMobMode() {
+    if (this.mobTimer) { clearInterval(this.mobTimer); this.mobTimer = null; }
+
+    const kills = this.mobState ? this.mobState.kills : {};
+
+    const rankings = Object.values(this.players).map(p => ({
+      id: p.id, name: p.name, color: p.color,
+      kills: kills[p.id] || 0,
+      alive: p.alive,
+    })).sort((a, b) => b.kills - a.kills).map((p, i) => ({ ...p, rank: i + 1 }));
+
+    const winner = rankings[0] || null;
+
+    this.io.to(this.roomCode).emit('phase_change', {
+      phase: 'result',
+      winner: winner ? { id: winner.id, name: winner.name } : null,
+      rankings,
+      killMode: true,
+    });
+    this.phase = PHASES.RESULT;
+  }
+
+  // ── Battle ────────────────────────────────────────────────────────
 
   updateBattlePosition(socketId, x, y) {
     const p = this.players[socketId];
@@ -297,7 +483,11 @@ class GameRoom {
     if (!p || !p.alive) return;
     p.alive = false;
     this.io.to(this.roomCode).emit('player_defeated', { id: socketId, name: p.name, killedBy });
-    this._checkBattleEnd();
+
+    // Only check battle end for royale mode
+    if (this.selectedMode === 'royale' || this.selectedMode === null) {
+      this._checkBattleEnd();
+    }
   }
 
   _checkBattleEnd() {
@@ -314,6 +504,9 @@ class GameRoom {
 
   _endBattle(winner) {
     if (this.phaseTimer) clearTimeout(this.phaseTimer);
+    this._clearBossTimers();
+    if (this.mobTimer) { clearInterval(this.mobTimer); this.mobTimer = null; }
+
     this.phase = PHASES.RESULT;
 
     const allPlayers = [
@@ -371,10 +564,17 @@ class GameRoom {
 
   returnToLobby() {
     if (this.phaseTimer) clearTimeout(this.phaseTimer);
+    this._clearBossTimers();
+    if (this.mobTimer) { clearInterval(this.mobTimer); this.mobTimer = null; }
+
     this.phase = PHASES.LOBBY;
     this.currentRound = 0;
     this.shopReadySet.clear();
     this.bots = {};
+    this.bossState = null;
+    this.mobState = null;
+    this.mobEnemies = {};
+    this.selectedMode = null;
 
     Object.values(this.players).forEach(p => {
       Object.assign(p, {
@@ -390,6 +590,8 @@ class GameRoom {
 
   destroy() {
     if (this.phaseTimer) clearTimeout(this.phaseTimer);
+    this._clearBossTimers();
+    if (this.mobTimer) { clearInterval(this.mobTimer); this.mobTimer = null; }
   }
 }
 
