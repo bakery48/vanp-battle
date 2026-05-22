@@ -28,7 +28,7 @@ class NetworkManager {
     const events = [
       'room_created', 'room_joined', 'join_error',
       'player_join', 'player_leave',
-      'rounds_updated',
+      'rounds_updated', 'cpu_count_updated',
       'phase_change',
       'solo_end',
       'shop_buy_result', 'shop_player_ready',
@@ -74,6 +74,14 @@ class NetworkManager {
 
   setRounds(rounds) {
     this.send('set_rounds', { rounds });
+  }
+
+  setCpuCount(count) {
+    this.send('set_cpu_count', { count });
+  }
+
+  reportBotDefeated(botId) {
+    this.send('bot_defeated', { botId });
   }
 
   startGame() {

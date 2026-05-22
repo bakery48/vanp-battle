@@ -4,9 +4,12 @@ class LobbyScene extends Phaser.Scene {
     this.uiContainer = null;
     this.playerListText = null;
     this.roundsText = null;
+    this.cpuText = null;
+    this.cpuSection = null;
     this.errorText = null;
     this._handlers = [];
     this._domInputs = [];
+    this._cpuCount = 0;
   }
 
   create() {
@@ -66,20 +69,24 @@ class LobbyScene extends Phaser.Scene {
     this._addHandler('player_join', (data) => {
       window.network.players = data.players;
       window.network.hostId = data.hostId;
-      this._updatePlayerList();
+      // Rebuild room UI so CPU section visibility updates
+      if (window.network.roomCode) this._showLobbyRoom();
     });
 
     this._addHandler('player_leave', (data) => {
       window.network.players = data.players;
       window.network.hostId = data.hostId;
-      this._updatePlayerList();
+      if (window.network.roomCode) this._showLobbyRoom();
     });
 
     this._addHandler('rounds_updated', (data) => {
       window.network.totalRounds = data.totalRounds;
-      if (this.roundsText) {
-        this.roundsText.setText(`${data.totalRounds}`);
-      }
+      if (this.roundsText) this.roundsText.setText(`${data.totalRounds}`);
+    });
+
+    this._addHandler('cpu_count_updated', (data) => {
+      this._cpuCount = data.cpuCount;
+      if (this.cpuText) this.cpuText.setText(`${this._cpuCount}`);
     });
 
     this._addHandler('phase_change', (data) => {
@@ -259,34 +266,66 @@ class LobbyScene extends Phaser.Scene {
     this._updatePlayerList();
 
     if (window.network.isHost()) {
-      const roundsLbl = this.add.text(W / 2 - 110, 450, 'ラウンド数:', {
+      // ── ラウンド数 ──
+      const roundsLbl = this.add.text(W / 2 - 110, 420, 'ラウンド数:', {
         fontSize: '18px', color: '#aabbcc',
       }).setOrigin(0, 0.5);
       this.uiContainer.add(roundsLbl);
 
-      const roundsTxt = this.add.text(W / 2 + 30, 450, `${window.network.totalRounds}`, {
+      const roundsTxt = this.add.text(W / 2 + 30, 420, `${window.network.totalRounds}`, {
         fontSize: '24px', fontStyle: 'bold', color: '#f0c040',
       }).setOrigin(0.5);
       this.uiContainer.add(roundsTxt);
       this.roundsText = roundsTxt;
 
-      const minusBtn = this._makeButton(W / 2 - 30, 450, 44, 34, '-', 0x553322, () => {
+      const minusRounds = this._makeButton(W / 2 - 30, 420, 44, 34, '-', 0x553322, () => {
         const r = Math.max(1, window.network.totalRounds - 1);
         window.network.setRounds(r);
         window.network.totalRounds = r;
         roundsTxt.setText(`${r}`);
       });
-      this.uiContainer.add(minusBtn);
+      this.uiContainer.add(minusRounds);
 
-      const plusBtn = this._makeButton(W / 2 + 80, 450, 44, 34, '+', 0x335522, () => {
+      const plusRounds = this._makeButton(W / 2 + 80, 420, 44, 34, '+', 0x335522, () => {
         const r = Math.min(5, window.network.totalRounds + 1);
         window.network.setRounds(r);
         window.network.totalRounds = r;
         roundsTxt.setText(`${r}`);
       });
-      this.uiContainer.add(plusBtn);
+      this.uiContainer.add(plusRounds);
 
-      const startBtn = this._makeButton(W / 2, 520, 240, 54, 'ゲームスタート', 0xcc3300, () => {
+      // ── CPU人数（1人プレイ時のみ表示）──
+      const players = window.network.players || [];
+      if (players.length === 1) {
+        const cpuLbl = this.add.text(W / 2 - 110, 465, 'CPU人数:', {
+          fontSize: '18px', color: '#ffaa44',
+        }).setOrigin(0, 0.5);
+        this.uiContainer.add(cpuLbl);
+
+        const cpuTxt = this.add.text(W / 2 + 30, 465, `${this._cpuCount}`, {
+          fontSize: '24px', fontStyle: 'bold', color: '#ffaa44',
+        }).setOrigin(0.5);
+        this.uiContainer.add(cpuTxt);
+        this.cpuText = cpuTxt;
+
+        const minusCpu = this._makeButton(W / 2 - 30, 465, 44, 34, '-', 0x553322, () => {
+          const c = Math.max(0, this._cpuCount - 1);
+          window.network.setCpuCount(c);
+          this._cpuCount = c;
+          cpuTxt.setText(`${c}`);
+        });
+        this.uiContainer.add(minusCpu);
+
+        const plusCpu = this._makeButton(W / 2 + 80, 465, 44, 34, '+', 0x335522, () => {
+          const c = Math.min(7, this._cpuCount + 1);
+          window.network.setCpuCount(c);
+          this._cpuCount = c;
+          cpuTxt.setText(`${c}`);
+        });
+        this.uiContainer.add(plusCpu);
+      }
+
+      const startBtn = this._makeButton(W / 2, 530, 240, 54, 'ゲームスタート', 0xcc3300, () => {
         window.network.startGame();
       });
       this.uiContainer.add(startBtn);

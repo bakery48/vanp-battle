@@ -7,6 +7,7 @@ class BattleScene extends Phaser.Scene {
     this.players = {}; // id -> { gfx, hpBg, hpBar, nameTxt, x, y, hp, maxHp, alive, speed, power, fireRate, bulletCount, bulletSpeed, shield, pierce }
     this.myBullets = [];
     this.otherBullets = [];
+    this.botBullets = [];
     this.fireTimer = 0;
     this.positionTimer = 0;
     this.isDead = false;
@@ -389,6 +390,10 @@ class BattleScene extends Phaser.Scene {
     // Update other players (interpolate)
     this._updateOtherPlayers(delta);
 
+    // Bot AI
+    this._updateBotAI(delta);
+    this._updateBotBullets(delta);
+
     // Update bullets
     this._updateBullets(delta);
 
@@ -531,11 +536,23 @@ class BattleScene extends Phaser.Scene {
       let hit = false;
       for (const [id, p] of Object.entries(this.players)) {
         if (id === myId || !p.alive || b.hitPlayers.has(id)) continue;
-        const dx = b.x - p.x;
-        const dy = b.y - p.y;
+        const dx = b.x - p.x, dy = b.y - p.y;
         if (Math.sqrt(dx * dx + dy * dy) < 22) {
           b.hitPlayers.add(id);
-          window.network.sendBattleHit(id, b.damage);
+
+          if (p.isBot) {
+            // Bot hit: handle client-side
+            p.hp = Math.max(0, p.hp - b.damage);
+            this._updatePlayerHpBar(id);
+            if (p.hp <= 0) {
+              p.alive = false;
+              p.gfx.setAlpha(0.3);
+              window.network.reportBotDefeated(id);
+            }
+          } else {
+            window.network.sendBattleHit(id, b.damage);
+          }
+
           if (!b.pierce) { hit = true; break; }
         }
       }
@@ -685,6 +702,150 @@ class BattleScene extends Phaser.Scene {
     });
   }
 
+  // ── Bot AI ──────────────────────────────────────────────────────
+
+  _updateBotAI(delta) {
+    const myId = window.network.myId;
+    const me = this.players[myId];
+
+    for (const [id, bot] of Object.entries(this.players)) {
+      if (!bot.isBot || !bot.alive) continue;
+
+      // Target: chase the human player if alive, else another bot
+      let target = (me && me.alive) ? me : null;
+      if (!target) {
+        target = Object.values(this.players).find(p => p !== bot && p.alive) || null;
+      }
+      if (!target) continue;
+
+      const dx = target.x - bot.x;
+      const dy = target.y - bot.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      // Movement: keep ~150px distance, strafe slightly
+      const PREF_DIST = 150;
+      let vx = 0, vy = 0;
+      if (dist > PREF_DIST + 30) {
+        vx = dx / dist;
+        vy = dy / dist;
+      } else if (dist < PREF_DIST - 30) {
+        vx = -(dx / dist);
+        vy = -(dy / dist);
+      }
+      // Strafe offset (unique per bot using strafePhase)
+      if (!bot.strafePhase) bot.strafePhase = Math.random() * Math.PI * 2;
+      const strafe = Math.sin(Date.now() * 0.0015 + bot.strafePhase) * 0.5;
+      if (dist > 0) { vx += (-dy / dist) * strafe; vy += (dx / dist) * strafe; }
+
+      const spd = (bot.speed || 140) * (delta / 1000);
+      bot.x = Phaser.Math.Clamp(bot.x + vx * spd, 20, this.worldW - 20);
+      bot.y = Phaser.Math.Clamp(bot.y + vy * spd, 20, this.worldH - 20);
+
+      // Update visuals
+      bot.gfx.x = bot.x;      bot.gfx.y = bot.y;
+      bot.hpBg.x = bot.x;     bot.hpBg.y = bot.y;
+      bot.hpBar.x = bot.x;    bot.hpBar.y = bot.y;
+      bot.nameTxt.x = bot.x;  bot.nameTxt.y = bot.y;
+
+      // Fire at target when in range
+      if (!bot.botFireTimer) bot.botFireTimer = 0;
+      bot.botFireTimer += delta;
+      if (bot.botFireTimer >= (bot.fireRate || 600) && dist < 700) {
+        bot.botFireTimer = 0;
+        this._botFire(bot, target.x, target.y);
+      }
+    }
+  }
+
+  _botFire(bot, targetX, targetY) {
+    const count = bot.bulletCount || 1;
+    const baseAngle = Math.atan2(targetY - bot.y, targetX - bot.x);
+    const spread = count > 1 ? Math.PI / 8 : 0;
+
+    for (let i = 0; i < count; i++) {
+      const offset = count === 1 ? 0 : (i - (count - 1) / 2) * spread;
+      const angle = baseAngle + offset;
+      const spd = bot.bulletSpeed || 350;
+
+      const g = this.add.graphics();
+      g.fillStyle(0xff4444, 0.9);
+      g.fillCircle(0, 0, 6);
+      g.lineStyle(1, 0xffaaaa, 0.5);
+      g.strokeCircle(0, 0, 6);
+      g.x = bot.x; g.y = bot.y;
+      g.setDepth(7);
+
+      this.botBullets.push({
+        gfx: g, x: bot.x, y: bot.y,
+        vx: Math.cos(angle) * spd,
+        vy: Math.sin(angle) * spd,
+        damage: bot.power || 8,
+        pierce: bot.pierce || false,
+        active: true, lifetime: 3000,
+        fromBotId: bot.id,
+      });
+    }
+  }
+
+  _updateBotBullets(delta) {
+    const myId = window.network.myId;
+    const me = this.players[myId];
+
+    for (let i = this.botBullets.length - 1; i >= 0; i--) {
+      const b = this.botBullets[i];
+      if (!b.active) { this.botBullets.splice(i, 1); continue; }
+
+      b.x += b.vx * (delta / 1000);
+      b.y += b.vy * (delta / 1000);
+      b.lifetime -= delta;
+      b.gfx.x = b.x; b.gfx.y = b.y;
+
+      if (b.x < 0 || b.x > this.worldW || b.y < 0 || b.y > this.worldH || b.lifetime <= 0) {
+        b.gfx.destroy(); b.active = false;
+        this.botBullets.splice(i, 1);
+        continue;
+      }
+
+      // Hit human player
+      if (me && me.alive && !this.isDead) {
+        const dx = b.x - me.x, dy = b.y - me.y;
+        if (Math.sqrt(dx * dx + dy * dy) < 18 + 6) {
+          b.gfx.destroy(); b.active = false;
+          this.botBullets.splice(i, 1);
+
+          me.hp = Math.max(0, me.hp - b.damage);
+          this.myStats.hp = me.hp;
+          this._updatePlayerHpBar(myId);
+
+          // Screen flash
+          const W = this.scale.width, H = this.scale.height;
+          const flash = this.add.graphics();
+          flash.fillStyle(0xff0000, 0.35);
+          flash.fillRect(0, 0, W, H);
+          flash.setScrollFactor(0).setDepth(500);
+          this.tweens.add({ targets: flash, alpha: 0, duration: 250, onComplete: () => flash.destroy() });
+
+          if (me.hp <= 0) {
+            this.isDead = true;
+            me.alive = false;
+            me.gfx.setAlpha(0.3);
+            window.network.sendPlayerDied(b.fromBotId);
+            this._showDeadMessage();
+            // Spectate a living bot
+            const aliveBot = Object.values(this.players).find(p => p.isBot && p.alive);
+            if (aliveBot) {
+              this.spectateTarget = aliveBot;
+              this.cameras.main.startFollow(aliveBot.gfx, true, 0.1, 0.1);
+            }
+          }
+          continue;
+        }
+      }
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+
   _addHandler(event, fn) {
     window.network.on(event, fn);
     this._handlers.push({ event, fn });
@@ -694,10 +855,12 @@ class BattleScene extends Phaser.Scene {
     this._handlers.forEach(({ event, fn }) => window.network.off(event, fn));
     this._handlers = [];
 
-    for (const b of this.myBullets) if (b.gfx) b.gfx.destroy();
-    this.myBullets = [];
+    for (const b of this.myBullets)   if (b.gfx) b.gfx.destroy();
     for (const b of this.otherBullets) if (b.gfx) b.gfx.destroy();
+    for (const b of this.botBullets)   if (b.gfx) b.gfx.destroy();
+    this.myBullets = [];
     this.otherBullets = [];
+    this.botBullets = [];
   }
 
   shutdown() {

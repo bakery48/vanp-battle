@@ -104,6 +104,24 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Host sets CPU count (solo play only)
+  socket.on('set_cpu_count', ({ count }) => {
+    const code = playerRoom[socket.id];
+    const room = rooms[code];
+    if (!room) return;
+    if (room.setCpuCount(count, socket.id)) {
+      socket.emit('cpu_count_updated', { cpuCount: room.cpuCount });
+    }
+  });
+
+  // Bot defeated (reported by host client)
+  socket.on('bot_defeated', ({ botId }) => {
+    const code = playerRoom[socket.id];
+    const room = rooms[code];
+    if (!room) return;
+    room.botDefeated(botId);
+  });
+
   // Host starts game
   socket.on('start_game', () => {
     const code = playerRoom[socket.id];
