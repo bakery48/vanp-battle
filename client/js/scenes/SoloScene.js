@@ -97,8 +97,11 @@ class SoloScene extends Phaser.Scene {
     this.lastAimAngle = null;
 
     // Systems
+    this.blockSystem  = new BlockSystem(this, worldW, worldH);
     this.enemySpawner = new EnemySpawner(this, { x: this.playerX, y: this.playerY });
     this.weaponSystem = new WeaponSystem(this, this.stats);
+    this.enemySpawner.blockSystem = this.blockSystem;
+    this.weaponSystem.blockSystem = this.blockSystem;
 
     // Callbacks
     this.onEnemyContact = (enemy) => {
@@ -405,8 +408,20 @@ class SoloScene extends Phaser.Scene {
 
     if (vx !== 0 && vy !== 0) { vx *= 0.707; vy *= 0.707; }
 
-    this.playerX = Phaser.Math.Clamp(this.playerX + vx * speed * (delta / 1000), 20, 1980);
-    this.playerY = Phaser.Math.Clamp(this.playerY + vy * speed * (delta / 1000), 20, 1980);
+    const dt = delta / 1000;
+    const moveX = vx * speed * dt;
+    const moveY = vy * speed * dt;
+    const R = 16;
+    const nx = Phaser.Math.Clamp(this.playerX + moveX, 20, 1980);
+    const ny = Phaser.Math.Clamp(this.playerY + moveY, 20, 1980);
+    if (!this.blockSystem.circleBlocked(nx, ny, R)) {
+      this.playerX = nx;
+      this.playerY = ny;
+    } else if (!this.blockSystem.circleBlocked(nx, this.playerY, R)) {
+      this.playerX = nx;
+    } else if (!this.blockSystem.circleBlocked(this.playerX, ny, R)) {
+      this.playerY = ny;
+    }
 
     this.playerGfx.x = this.playerX;
     this.playerGfx.y = this.playerY;
@@ -508,6 +523,7 @@ class SoloScene extends Phaser.Scene {
   _cleanup() {
     this._handlers.forEach(({ event, fn }) => window.network.off(event, fn));
     this._handlers = [];
+    if (this.blockSystem)  this.blockSystem.destroy();
     if (this.enemySpawner) this.enemySpawner.destroyAll();
     if (this.weaponSystem) this.weaponSystem.destroyAll();
     for (const orb of this.expOrbs) {

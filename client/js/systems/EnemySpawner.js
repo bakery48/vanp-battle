@@ -10,6 +10,8 @@ class EnemySpawner {
     this.worldWidth = 2000;
     this.worldHeight = 2000;
 
+    this.blockSystem = null;
+
     this.enemyTypes = [
       { id: 'slime',   hp: 30,  speed: 60,  damage: 5,  exp: 5,  gold: 3,  size: 14, color: 0x66cc44 },
       { id: 'bat',     hp: 15,  speed: 100, damage: 3,  exp: 8,  gold: 2,  size: 10, color: 0x8844cc },
@@ -214,17 +216,14 @@ class EnemySpawner {
       const prefDist = 220;
       const spd = e.speed * (delta / 1000);
       if (dist < prefDist - 60 && dist > 0) {
-        e.x -= (dx / dist) * spd;
-        e.y -= (dy / dist) * spd;
+        this._moveWithSlide(e, -(dx / dist) * spd, -(dy / dist) * spd);
       } else if (dist > prefDist + 80 && dist > 0) {
-        e.x += (dx / dist) * spd;
-        e.y += (dy / dist) * spd;
+        this._moveWithSlide(e, (dx / dist) * spd, (dy / dist) * spd);
       }
     } else {
       if (dist > 0) {
         const spd = e.speed * (delta / 1000);
-        e.x += (dx / dist) * spd;
-        e.y += (dy / dist) * spd;
+        this._moveWithSlide(e, (dx / dist) * spd, (dy / dist) * spd);
       }
     }
 
@@ -256,6 +255,25 @@ class EnemySpawner {
       if (this.scene.onEnemyContact) {
         this.scene.onEnemyContact(e);
       }
+    }
+  }
+
+  _moveWithSlide(e, mvx, mvy) {
+    const r = e.size + 2;
+    if (!this.blockSystem) {
+      e.x += mvx;
+      e.y += mvy;
+      return;
+    }
+    const nx = e.x + mvx;
+    const ny = e.y + mvy;
+    if (!this.blockSystem.circleBlocked(nx, ny, r)) {
+      e.x = nx;
+      e.y = ny;
+    } else if (!this.blockSystem.circleBlocked(nx, e.y, r)) {
+      e.x = nx;
+    } else if (!this.blockSystem.circleBlocked(e.x, ny, r)) {
+      e.y = ny;
     }
   }
 
@@ -305,6 +323,13 @@ class EnemySpawner {
       b.gfx.y = b.y;
 
       if (b.x < 0 || b.x > this.worldWidth || b.y < 0 || b.y > this.worldHeight || b.lifetime <= 0) {
+        b.gfx.destroy();
+        b.active = false;
+        this.enemyBullets.splice(i, 1);
+        continue;
+      }
+
+      if (this.blockSystem && this.blockSystem.bulletHits(b.x, b.y, b.radius)) {
         b.gfx.destroy();
         b.active = false;
         this.enemyBullets.splice(i, 1);

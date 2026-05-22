@@ -4,6 +4,7 @@ class WeaponSystem {
     this.stats = stats;
     this.bullets = [];
     this.fireTimer = 0;
+    this.blockSystem = null;
   }
 
   // aimAngle: radians or null (→ auto-target nearest enemy)
@@ -83,6 +84,12 @@ class WeaponSystem {
       b.gfx.y = b.y;
 
       if (b.x < 0 || b.x > 2000 || b.y < 0 || b.y > 2000 || b.lifetime <= 0) {
+        this._destroyBullet(b);
+        this.bullets.splice(i, 1);
+        continue;
+      }
+
+      if (this.blockSystem && this.blockSystem.bulletHits(b.x, b.y, 5)) {
         this._destroyBullet(b);
         this.bullets.splice(i, 1);
         continue;
