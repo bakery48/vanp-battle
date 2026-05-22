@@ -711,10 +711,13 @@ class BattleScene extends Phaser.Scene {
     for (const [id, bot] of Object.entries(this.players)) {
       if (!bot.isBot || !bot.alive) continue;
 
-      // Target: chase the human player if alive, else another bot
-      let target = (me && me.alive) ? me : null;
-      if (!target) {
-        target = Object.values(this.players).find(p => p !== bot && p.alive) || null;
+      // Target: nearest alive combatant
+      let target = null;
+      let minDist = Infinity;
+      for (const [tid, tp] of Object.entries(this.players)) {
+        if (tid === id || !tp.alive) continue;
+        const d = Math.hypot(tp.x - bot.x, tp.y - bot.y);
+        if (d < minDist) { minDist = d; target = tp; }
       }
       if (!target) continue;
 
