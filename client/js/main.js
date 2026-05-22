@@ -6,6 +6,9 @@ const config = {
   backgroundColor: '#1a1a2e',
   parent: document.body,
   scene: [LobbyScene, SoloScene, ShopScene, BattleScene, BestiaryScene],
+  input: {
+    activePointers: 3,
+  },
   physics: {
     default: 'arcade',
     arcade: { gravity: { y: 0 }, debug: false }

@@ -20,6 +20,9 @@ class BattleScene extends Phaser.Scene {
     this.myX = 750;
     this.myY = 750;
 
+    // Touch controls
+    this.touchControls = null;
+
     // Battle mode
     this.battleMode = 'royale';
     this.modeAnnounced = false;
@@ -132,6 +135,9 @@ class BattleScene extends Phaser.Scene {
 
     // HUD
     this._createHUD();
+
+    // Virtual joystick (mobile)
+    this.touchControls = new TouchControls(this);
 
     // Mode-specific initialization
     if (this.battleMode === 'boss') {
@@ -889,14 +895,19 @@ class BattleScene extends Phaser.Scene {
       return;
     }
 
-    // Movement
+    // Movement (keyboard or left joystick)
     const speed = me.speed;
     let vx = 0, vy = 0;
-    if (this.cursors.left.isDown) vx -= 1;
-    if (this.cursors.right.isDown) vx += 1;
-    if (this.cursors.up.isDown) vy -= 1;
-    if (this.cursors.down.isDown) vy += 1;
-    if (vx !== 0 && vy !== 0) { vx *= 0.707; vy *= 0.707; }
+    if (this.touchControls && this.touchControls.moveActive) {
+      vx = this.touchControls.moveVec.x;
+      vy = this.touchControls.moveVec.y;
+    } else {
+      if (this.cursors.left.isDown)  vx -= 1;
+      if (this.cursors.right.isDown) vx += 1;
+      if (this.cursors.up.isDown)    vy -= 1;
+      if (this.cursors.down.isDown)  vy += 1;
+      if (vx !== 0 && vy !== 0) { vx *= 0.707; vy *= 0.707; }
+    }
 
     this.myX = Phaser.Math.Clamp(this.myX + vx * speed * (delta / 1000), 20, this.worldW - 20);
     this.myY = Phaser.Math.Clamp(this.myY + vy * speed * (delta / 1000), 20, this.worldH - 20);
@@ -919,13 +930,17 @@ class BattleScene extends Phaser.Scene {
       window.network.sendBattlePosition(this.myX, this.myY);
     }
 
-    // Aim direction from arrow keys
+    // Aim direction — arrow keys then right joystick
     const ak = this.aimKeys;
     const ax = (ak.right.isDown ? 1 : 0) - (ak.left.isDown ? 1 : 0);
     const ay = (ak.down.isDown  ? 1 : 0) - (ak.up.isDown   ? 1 : 0);
     let manualAim = null;
     if (ax !== 0 || ay !== 0) {
       manualAim = Math.atan2(ay, ax);
+      this.lastAimAngle = manualAim;
+    }
+    if (this.touchControls && this.touchControls.aimActive && this.touchControls.aimAngle !== null) {
+      manualAim = this.touchControls.aimAngle;
       this.lastAimAngle = manualAim;
     }
     this._drawAimIndicator(manualAim);
@@ -1435,6 +1450,7 @@ class BattleScene extends Phaser.Scene {
   }
 
   _cleanup() {
+    if (this.touchControls) { this.touchControls.destroy(); this.touchControls = null; }
     this._handlers.forEach(({ event, fn }) => window.network.off(event, fn));
     this._handlers = [];
 

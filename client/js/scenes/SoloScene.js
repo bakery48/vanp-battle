@@ -136,6 +136,9 @@ class SoloScene extends Phaser.Scene {
     // HUD
     this._createHUD();
 
+    // Virtual joystick (mobile)
+    this.touchControls = new TouchControls(this);
+
     // Network event: phase change (server might push us to shop)
     this._addHandler('phase_change', (data) => {
       if (data.phase === 'shop') {
@@ -411,16 +414,20 @@ class SoloScene extends Phaser.Scene {
 
     this.elapsedMs += delta;
 
-    // Move player
+    // Move player (keyboard or left joystick)
     const speed = this.stats.speed;
     let vx = 0, vy = 0;
 
-    if (this.cursors.left.isDown) vx -= 1;
-    if (this.cursors.right.isDown) vx += 1;
-    if (this.cursors.up.isDown) vy -= 1;
-    if (this.cursors.down.isDown) vy += 1;
-
-    if (vx !== 0 && vy !== 0) { vx *= 0.707; vy *= 0.707; }
+    if (this.touchControls && this.touchControls.moveActive) {
+      vx = this.touchControls.moveVec.x;
+      vy = this.touchControls.moveVec.y;
+    } else {
+      if (this.cursors.left.isDown)  vx -= 1;
+      if (this.cursors.right.isDown) vx += 1;
+      if (this.cursors.up.isDown)    vy -= 1;
+      if (this.cursors.down.isDown)  vy += 1;
+      if (vx !== 0 && vy !== 0) { vx *= 0.707; vy *= 0.707; }
+    }
 
     const dt = delta / 1000;
     const moveX = vx * speed * dt;
@@ -448,13 +455,17 @@ class SoloScene extends Phaser.Scene {
     const elapsedSec = this.elapsedMs / 1000;
     this.enemySpawner.update(delta, this.round, elapsedSec);
 
-    // Aim direction from arrow keys (null → auto-aim)
+    // Aim direction — arrow keys, then right joystick (joystick overrides)
     let aimAngle = null;
     const ak = this.aimKeys;
     const ax = (ak.right.isDown ? 1 : 0) - (ak.left.isDown ? 1 : 0);
     const ay = (ak.down.isDown  ? 1 : 0) - (ak.up.isDown   ? 1 : 0);
     if (ax !== 0 || ay !== 0) {
       aimAngle = Math.atan2(ay, ax);
+      this.lastAimAngle = aimAngle;
+    }
+    if (this.touchControls && this.touchControls.aimActive && this.touchControls.aimAngle !== null) {
+      aimAngle = this.touchControls.aimAngle;
       this.lastAimAngle = aimAngle;
     }
     this._drawAimIndicator(aimAngle);
@@ -563,8 +574,9 @@ class SoloScene extends Phaser.Scene {
   _cleanup() {
     this._handlers.forEach(({ event, fn }) => window.network.off(event, fn));
     this._handlers = [];
-    if (this.blockSystem)  this.blockSystem.destroy();
-    if (this.enemySpawner) this.enemySpawner.destroyAll();
+    if (this.touchControls) { this.touchControls.destroy(); this.touchControls = null; }
+    if (this.blockSystem)   this.blockSystem.destroy();
+    if (this.enemySpawner)  this.enemySpawner.destroyAll();
     if (this.weaponSystem) this.weaponSystem.destroyAll();
     for (const orb of this.expOrbs) {
       if (orb.gfx) orb.gfx.destroy();
