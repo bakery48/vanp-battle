@@ -414,6 +414,8 @@ class SoloScene extends Phaser.Scene {
 
     this.elapsedMs += delta;
 
+    if (!this._isChoosingAbility) {
+
     // Move player (keyboard or left joystick)
     const speed = this.stats.speed;
     let vx = 0, vy = 0;
@@ -485,6 +487,8 @@ class SoloScene extends Phaser.Scene {
 
     // Update exp orbs
     this._updateExpOrbs();
+
+    } // end !_isChoosingAbility
 
     // Update HUD
     this._updateHUD();
