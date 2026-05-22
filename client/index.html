@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vanp Battle</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #111;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+      font-family: 'Segoe UI', sans-serif;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+  <script src="/js/systems/Player.js"></script>
+  <script src="/js/systems/EnemySpawner.js"></script>
+  <script src="/js/systems/WeaponSystem.js"></script>
+  <script src="/js/systems/AbilitySystem.js"></script>
+  <script src="/js/NetworkManager.js"></script>
+  <script src="/js/scenes/LobbyScene.js"></script>
+  <script src="/js/scenes/SoloScene.js"></script>
+  <script src="/js/scenes/ShopScene.js"></script>
+  <script src="/js/scenes/BattleScene.js"></script>
+  <script src="/js/main.js"></script>
+</body>
+</html>
